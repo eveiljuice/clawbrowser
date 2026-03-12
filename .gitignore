@@ -1,0 +1,8 @@
+node_modules/
+bun.lockb
+dist/
+clawbrowser
+*.png
+*.json
+!package.json
+!tsconfig.json
