@@ -96,6 +96,103 @@ program
     });
   });
 
+// --- DAEMON ---
+const daemon = program
+  .command("daemon")
+  .description("Background Chrome daemon — 10x faster browsing");
+
+daemon
+  .command("start")
+  .description("Start the daemon (Chrome stays alive in background)")
+  .action(async () => {
+    const { getDaemonInfo } = await import("./daemon/client.js");
+    const existing = getDaemonInfo();
+    if (existing) {
+      console.log(`Daemon already running (PID ${existing.pid}, started ${existing.startedAt})`);
+      process.exit(0);
+    }
+
+    const { spawn } = await import("child_process");
+    // Use node (not bun) — Bun WebSocket doesn't work with Playwright CDP
+    const child = spawn("node", [`${import.meta.dir}/daemon/server.ts`], {
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, NODE_NO_WARNINGS: "1" },
+    });
+
+    child.unref();
+
+    let started = false;
+    child.stdout?.on("data", (data: Buffer) => {
+      const msg = data.toString().trim();
+      if (msg && !started) {
+        console.log(msg);
+        started = true;
+      }
+    });
+
+    child.stderr?.on("data", (data: Buffer) => {
+      const msg = data.toString().trim();
+      if (msg.includes("already running")) {
+        console.log(msg);
+        process.exit(0);
+      }
+    });
+
+    await new Promise((r) => setTimeout(r, 4000));
+    if (!started) {
+      console.log("Daemon starting... (check 'clawbrowser daemon status')");
+    }
+  });
+
+daemon
+  .command("stop")
+  .description("Stop the daemon")
+  .action(async () => {
+    const { getDaemonInfo, daemonRequest } = await import("./daemon/client.js");
+    const info = getDaemonInfo();
+    if (!info) {
+      console.log("No daemon running");
+      process.exit(0);
+    }
+    // Graceful stop via HTTP
+    await daemonRequest("/stop", {}, 3000).catch(() => {});
+    // Fallback: kill process
+    try { process.kill(info.pid, "SIGTERM"); } catch {}
+    console.log(`Daemon stopped (PID ${info.pid})`);
+    const { unlinkSync } = await import("fs");
+    const { join } = await import("path");
+    try { unlinkSync(join(process.env.HOME || "/root", ".clawbrowser", "daemon.json")); } catch {}
+  });
+
+daemon
+  .command("status")
+  .description("Check daemon status")
+  .action(async () => {
+    const { getDaemonInfo, daemonRequest } = await import("./daemon/client.js");
+    const info = getDaemonInfo();
+    if (info) {
+      const status = await daemonRequest("/status", {}, 3000).catch(() => null);
+      // /status is GET but daemonRequest sends POST — use fetch directly
+      let statusData: any = null;
+      try {
+        const res = await fetch(`http://127.0.0.1:${info.port}/status`, { signal: AbortSignal.timeout(2000) });
+        statusData = await res.json();
+      } catch {}
+
+      console.log(`Daemon running (PID ${info.pid})`);
+      console.log(`  Port: ${info.port}`);
+      console.log(`  Started: ${info.startedAt}`);
+      if (statusData) {
+        console.log(`  Uptime: ${statusData.uptime}s`);
+        console.log(`  Requests served: ${statusData.requests}`);
+        console.log(`  Chrome: ${statusData.chrome}`);
+      }
+    } else {
+      console.log("No daemon running");
+    }
+  });
+
 // Default: show help
 if (process.argv.length <= 2) {
   program.help();

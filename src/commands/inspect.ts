@@ -1,5 +1,5 @@
 import type { Page, Request, Response, ConsoleMessage } from "playwright";
-import { launchBrowser, openPage, type LaunchOptions } from "../browser/launch.js";
+import { launchBrowser, closeBrowser, type LaunchOptions } from "../browser/launch.js";
 
 export interface InspectOptions extends LaunchOptions {
   dom?: string | boolean;    // --dom or --dom "selector"
@@ -31,7 +31,8 @@ interface ConsoleEntry {
 }
 
 export async function inspect(url: string, opts: InspectOptions = {}) {
-  const browser = await launchBrowser(opts);
+  const handle = await launchBrowser(opts);
+  const browser = handle.browser;
 
   const wantAll = opts.all;
   const wantNetwork = wantAll || opts.network;
@@ -341,5 +342,6 @@ export async function inspect(url: string, opts: InspectOptions = {}) {
 
   console.log(JSON.stringify(result, null, 2));
 
-  await browser.close();
+  await context.close();
+  await closeBrowser(handle);
 }

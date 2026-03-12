@@ -1,10 +1,9 @@
 import { chromium } from "playwright-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import type { Browser, Page, BrowserContext } from "playwright";
+import { connectOrLaunch, type DaemonConnection } from "../daemon/client.js";
 
-// Stealth plugin — 11 evasion techniques:
-// navigator.webdriver, chrome.runtime, permissions, WebGL fingerprint,
-// plugins/mimeTypes, languages, iframe.contentWindow, etc.
+// Stealth plugin — 11 evasion techniques
 chromium.use(StealthPlugin());
 
 export interface LaunchOptions {
@@ -27,7 +26,7 @@ const USER_AGENTS = [
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
 ];
 
-// Realistic viewport sizes (common desktop resolutions)
+// Realistic viewport sizes
 const VIEWPORTS = [
   { width: 1920, height: 1080 },
   { width: 1536, height: 864 },
@@ -44,20 +43,36 @@ function randomFrom<T>(arr: T[]): T {
 
 const DEFAULT_TIMEOUT = 30_000;
 
-export async function launchBrowser(opts: LaunchOptions = {}): Promise<Browser> {
-  const launchOpts: any = {
-    headless: opts.headless ?? true,
-  };
+export interface BrowserHandle {
+  browser: Browser;
+  isDaemon: boolean;
+}
 
-  if (opts.proxy) {
-    launchOpts.proxy = { server: opts.proxy };
+/**
+ * Launch or connect to browser.
+ * If daemon is running, connects to it (faster).
+ * Otherwise launches a new Chrome instance.
+ */
+export async function launchBrowser(opts: LaunchOptions = {}): Promise<BrowserHandle> {
+  const conn = await connectOrLaunch({
+    proxy: opts.proxy,
+    headless: opts.headless,
+  });
+
+  return { browser: conn.browser, isDaemon: conn.isDaemon };
+}
+
+/**
+ * Close browser only if it's NOT a daemon connection.
+ */
+export async function closeBrowser(handle: BrowserHandle) {
+  if (!handle.isDaemon) {
+    await handle.browser.close();
   }
-
-  return chromium.launch(launchOpts);
 }
 
 export async function openPage(
-  browser: Browser,
+  handle: BrowserHandle,
   url: string,
   opts: LaunchOptions = {}
 ): Promise<{ context: BrowserContext; page: Page }> {
@@ -71,7 +86,6 @@ export async function openPage(
   if (useStealth) {
     contextOpts.locale = "en-US";
     contextOpts.timezoneId = "America/New_York";
-    contextOpts.geolocation = undefined;
     contextOpts.permissions = [];
     contextOpts.extraHTTPHeaders = {
       "Accept-Language": "en-US,en;q=0.9",
@@ -81,44 +95,19 @@ export async function openPage(
     };
   }
 
-  const context = await browser.newContext(contextOpts);
+  const context = await handle.browser.newContext(contextOpts);
   const page = await context.newPage();
   page.setDefaultTimeout(opts.timeout ?? DEFAULT_TIMEOUT);
 
   if (useStealth) {
-    // Additional stealth: override navigator properties via addInitScript
     await page.addInitScript(() => {
-      // Ensure webdriver is false
       Object.defineProperty(navigator, "webdriver", { get: () => false });
-
-      // Chrome object
       if (!(window as any).chrome) {
         (window as any).chrome = { runtime: {}, loadTimes: () => {}, csi: () => {} };
       }
-
-      // Realistic plugins
-      Object.defineProperty(navigator, "plugins", {
-        get: () => [1, 2, 3, 4, 5],
-      });
-
-      // Realistic hardware concurrency
-      Object.defineProperty(navigator, "hardwareConcurrency", {
-        get: () => 8,
-      });
-
-      // Device memory
-      Object.defineProperty(navigator, "deviceMemory", {
-        get: () => 8,
-      });
-
-      // Permissions query override
-      const origQuery = window.Permissions?.prototype?.query;
-      if (origQuery) {
-        window.Permissions.prototype.query = (parameters: any) =>
-          parameters.name === "notifications"
-            ? Promise.resolve({ state: Notification.permission } as PermissionStatus)
-            : origQuery.call(window.navigator.permissions, parameters);
-      }
+      Object.defineProperty(navigator, "plugins", { get: () => [1, 2, 3, 4, 5] });
+      Object.defineProperty(navigator, "hardwareConcurrency", { get: () => 8 });
+      Object.defineProperty(navigator, "deviceMemory", { get: () => 8 });
     });
   }
 
@@ -127,12 +116,10 @@ export async function openPage(
     await page.goto(url, { waitUntil: "networkidle", timeout: opts.timeout ?? DEFAULT_TIMEOUT });
   } catch (e: any) {
     if (e.message?.includes("Timeout")) {
-      // Fallback: if networkidle times out, try domcontentloaded + extra wait
       try {
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: opts.timeout ?? DEFAULT_TIMEOUT });
-        await page.waitForTimeout(3000); // give SPA time to render
+        await page.waitForTimeout(3000);
       } catch {
-        // If even domcontentloaded fails, throw original error
         throw e;
       }
     } else {
