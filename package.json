@@ -11,11 +11,13 @@
     "build": "bun build src/index.ts --compile --outfile clawbrowser"
   },
   "dependencies": {
-    "playwright": "^1.58.0",
     "@mozilla/readability": "^0.5.0",
+    "commander": "^13.0.0",
     "jsdom": "^26.0.0",
-    "turndown": "^7.2.0",
-    "commander": "^13.0.0"
+    "playwright": "^1.58.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "turndown": "^7.2.0"
   },
   "devDependencies": {
     "@types/turndown": "^5.0.5",

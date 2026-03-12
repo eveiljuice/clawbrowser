@@ -1,5 +1,5 @@
-import { chromium, type Page, type Request, type Response, type ConsoleMessage } from "playwright";
-import type { LaunchOptions } from "../browser/launch.js";
+import type { Page, Request, Response, ConsoleMessage } from "playwright";
+import { launchBrowser, openPage, type LaunchOptions } from "../browser/launch.js";
 
 export interface InspectOptions extends LaunchOptions {
   dom?: string | boolean;    // --dom or --dom "selector"
@@ -31,12 +31,7 @@ interface ConsoleEntry {
 }
 
 export async function inspect(url: string, opts: InspectOptions = {}) {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    viewport: opts.viewport ?? { width: 1280, height: 720 },
-  });
-  const page = await context.newPage();
-  page.setDefaultTimeout(opts.timeout ?? 30_000);
+  const browser = await launchBrowser(opts);
 
   const wantAll = opts.all;
   const wantNetwork = wantAll || opts.network;
@@ -47,6 +42,27 @@ export async function inspect(url: string, opts: InspectOptions = {}) {
   const wantA11y = wantAll || opts.a11y;
   const wantHeaders = wantAll || opts.headers;
   const wantCss = opts.css !== undefined;
+
+  // For inspect, we need to set up listeners BEFORE navigation,
+  // so we create context/page manually instead of using openPage()
+  const { chromium } = await import("playwright-extra");
+  const context = await browser.newContext({
+    viewport: opts.viewport ?? { width: 1280, height: 720 },
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    extraHTTPHeaders: {
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+  });
+  const page = await context.newPage();
+  page.setDefaultTimeout(opts.timeout ?? 30_000);
+
+  // Stealth init script
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => false });
+    if (!(window as any).chrome) {
+      (window as any).chrome = { runtime: {}, loadTimes: () => {}, csi: () => {} };
+    }
+  });
 
   // --- Collectors (set up BEFORE navigation) ---
   const networkLog: NetworkEntry[] = [];
@@ -83,8 +99,18 @@ export async function inspect(url: string, opts: InspectOptions = {}) {
     });
   }
 
-  // --- Navigate ---
-  const navResponse = await page.goto(url, { waitUntil: "networkidle" });
+  // --- Navigate with smart fallback ---
+  let navResponse;
+  try {
+    navResponse = await page.goto(url, { waitUntil: "networkidle" });
+  } catch (e: any) {
+    if (e.message?.includes("Timeout")) {
+      navResponse = await page.goto(url, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(3000);
+    } else {
+      throw e;
+    }
+  }
 
   if (wantHeaders && navResponse) {
     responseHeaders = await navResponse.allHeaders();

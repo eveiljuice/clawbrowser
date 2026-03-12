@@ -1,4 +1,8 @@
-import { chromium, type Page, type BrowserContext, type Browser } from "playwright";
+import { chromium } from "playwright-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import type { Page, BrowserContext, Browser } from "playwright";
+
+chromium.use(StealthPlugin());
 import * as readline from "readline";
 import { extractReadable } from "../extract/readability.js";
 import { htmlToMarkdown } from "../extract/markdown.js";
