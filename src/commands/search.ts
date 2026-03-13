@@ -4,7 +4,7 @@ import { daemonRequest } from "../daemon/client.js";
 export interface SearchOptions extends LaunchOptions {
   max?: number;
   engine?: "auto" | "duckduckgo" | "startpage";
-  type?: "web" | "images" | "videos";
+  type?: "web" | "images" | "videos" | "all";
 }
 
 // ---- Engine configs per search type ----
@@ -128,6 +128,34 @@ function getEngines(type: string, engine: string): EngineConfig[] {
 export async function search(query: string, opts: SearchOptions = {}) {
   const max = opts.max ?? 10;
   const type = opts.type ?? "web";
+
+  // --type all: run web + images + videos, merge results
+  if (type === "all") {
+    const allResults: Record<string, any> = { query, type: "all" };
+
+    for (const t of ["web", "images", "videos"] as const) {
+      try {
+        // Capture output by temporarily redirecting
+        const captured: any[] = [];
+        const origLog = console.log;
+        console.log = (data: string) => {
+          try { captured.push(JSON.parse(data)); } catch {}
+        };
+        await search(query, { ...opts, type: t, max: Math.min(max, t === "web" ? max : 5) });
+        console.log = origLog;
+
+        if (captured[0]) {
+          allResults[t] = captured[0].results;
+        }
+      } catch {
+        allResults[t] = [];
+      }
+    }
+
+    console.log(JSON.stringify(allResults, null, 2));
+    return;
+  }
+
   const engines = getEngines(type, opts.engine ?? "auto");
 
   // Try daemon first

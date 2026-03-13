@@ -89,7 +89,7 @@ program
 program
   .command("search <query>")
   .description("Search the web — structured results, no API keys needed")
-  .option("-T, --type <type>", "search type: web|images|videos", "web")
+  .option("-T, --type <type>", "search type: web|images|videos|all", "web")
   .option("-m, --max <n>", "max results to return", "10")
   .option("-e, --engine <name>", "search engine: auto|duckduckgo|startpage", "auto")
   .option("-t, --timeout <ms>", "timeout per engine in ms", "15000")
