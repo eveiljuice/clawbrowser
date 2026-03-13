@@ -5,7 +5,7 @@ import { exec } from "./commands/exec.js";
 import { inspect } from "./commands/inspect.js";
 import { session } from "./commands/session.js";
 import { search } from "./commands/search.js";
-import { summarize } from "./commands/summarize.js";
+
 
 const program = new Command();
 
@@ -89,12 +89,14 @@ program
 program
   .command("search <query>")
   .description("Search the web — structured results, no API keys needed")
+  .option("-T, --type <type>", "search type: web|images|videos", "web")
   .option("-m, --max <n>", "max results to return", "10")
   .option("-e, --engine <name>", "search engine: auto|duckduckgo|startpage", "auto")
   .option("-t, --timeout <ms>", "timeout per engine in ms", "15000")
   .option("--proxy <url>", "proxy server URL")
   .action(async (query, opts) => {
     await search(query, {
+      type: opts.type,
       max: parseInt(opts.max),
       engine: opts.engine,
       timeout: parseInt(opts.timeout),
@@ -102,26 +104,6 @@ program
     });
   });
 
-// --- SUMMARIZE ---
-program
-  .command("summarize <url>")
-  .description("Extract and summarize page content — key points, structure, reading time")
-  .option("-f, --format <type>", "output format: md|json|text", "md")
-  .option("-s, --selector <css>", "extract only matching selector")
-  .option("-w, --wait-for <css>", "wait for selector before extracting")
-  .option("-l, --max-length <chars>", "max content length in chars", "4000")
-  .option("-t, --timeout <ms>", "navigation timeout in ms", "30000")
-  .option("--proxy <url>", "proxy server URL")
-  .action(async (url, opts) => {
-    await summarize(url, {
-      format: opts.format,
-      selector: opts.selector,
-      waitFor: opts.waitFor,
-      maxLength: parseInt(opts.maxLength),
-      timeout: parseInt(opts.timeout),
-      proxy: opts.proxy,
-    });
-  });
 
 // --- SESSION ---
 program
