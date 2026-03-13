@@ -5,6 +5,7 @@ import { exec } from "./commands/exec.js";
 import { inspect } from "./commands/inspect.js";
 import { session } from "./commands/session.js";
 import { search } from "./commands/search.js";
+import { summarize } from "./commands/summarize.js";
 
 const program = new Command();
 
@@ -96,6 +97,27 @@ program
     await search(query, {
       max: parseInt(opts.max),
       engine: opts.engine,
+      timeout: parseInt(opts.timeout),
+      proxy: opts.proxy,
+    });
+  });
+
+// --- SUMMARIZE ---
+program
+  .command("summarize <url>")
+  .description("Extract and summarize page content — key points, structure, reading time")
+  .option("-f, --format <type>", "output format: md|json|text", "md")
+  .option("-s, --selector <css>", "extract only matching selector")
+  .option("-w, --wait-for <css>", "wait for selector before extracting")
+  .option("-l, --max-length <chars>", "max content length in chars", "4000")
+  .option("-t, --timeout <ms>", "navigation timeout in ms", "30000")
+  .option("--proxy <url>", "proxy server URL")
+  .action(async (url, opts) => {
+    await summarize(url, {
+      format: opts.format,
+      selector: opts.selector,
+      waitFor: opts.waitFor,
+      maxLength: parseInt(opts.maxLength),
       timeout: parseInt(opts.timeout),
       proxy: opts.proxy,
     });
