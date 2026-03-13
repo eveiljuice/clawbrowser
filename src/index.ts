@@ -4,6 +4,7 @@ import { get } from "./commands/get.js";
 import { exec } from "./commands/exec.js";
 import { inspect } from "./commands/inspect.js";
 import { session } from "./commands/session.js";
+import { search } from "./commands/search.js";
 
 const program = new Command();
 
@@ -78,6 +79,23 @@ program
       css: opts.css,
       all: !hasFlag || opts.all,
       waitFor: opts.waitFor,
+      timeout: parseInt(opts.timeout),
+      proxy: opts.proxy,
+    });
+  });
+
+// --- SEARCH ---
+program
+  .command("search <query>")
+  .description("Search the web — structured results, no API keys needed")
+  .option("-m, --max <n>", "max results to return", "10")
+  .option("-e, --engine <name>", "search engine: auto|duckduckgo|startpage", "auto")
+  .option("-t, --timeout <ms>", "timeout per engine in ms", "15000")
+  .option("--proxy <url>", "proxy server URL")
+  .action(async (query, opts) => {
+    await search(query, {
+      max: parseInt(opts.max),
+      engine: opts.engine,
       timeout: parseInt(opts.timeout),
       proxy: opts.proxy,
     });
