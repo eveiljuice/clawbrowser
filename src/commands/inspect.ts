@@ -46,24 +46,11 @@ export async function inspect(url: string, opts: InspectOptions = {}) {
 
   // For inspect, we need to set up listeners BEFORE navigation,
   // so we create context/page manually instead of using openPage()
-  const { chromium } = await import("playwright-extra");
-  const context = await browser.newContext({
-    viewport: opts.viewport ?? { width: 1280, height: 720 },
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    extraHTTPHeaders: {
-      "Accept-Language": "en-US,en;q=0.9",
-    },
-  });
+  const { stealthContextOptions, applyStealthScripts } = await import("../browser/stealth.js");
+  const context = await browser.newContext(stealthContextOptions());
   const page = await context.newPage();
   page.setDefaultTimeout(opts.timeout ?? 30_000);
-
-  // Stealth init script
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "webdriver", { get: () => false });
-    if (!(window as any).chrome) {
-      (window as any).chrome = { runtime: {}, loadTimes: () => {}, csi: () => {} };
-    }
-  });
+  await applyStealthScripts(page);
 
   // --- Collectors (set up BEFORE navigation) ---
   const networkLog: NetworkEntry[] = [];

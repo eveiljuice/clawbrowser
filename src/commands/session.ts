@@ -1,8 +1,6 @@
-import { chromium } from "playwright-extra";
-import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import { chromium } from "playwright";
 import type { Page, BrowserContext, Browser } from "playwright";
-
-chromium.use(StealthPlugin());
+import { applyStealthScripts, stealthContextOptions } from "../browser/stealth.js";
 import * as readline from "readline";
 import { extractReadable } from "../extract/readability.js";
 import { htmlToMarkdown } from "../extract/markdown.js";
@@ -37,10 +35,14 @@ Commands:
 `.trim();
 
 export async function session(startUrl: string | undefined, opts: SessionOptions = {}) {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--disable-blink-features=AutomationControlled", "--no-sandbox"],
+  });
+  const context = await browser.newContext(stealthContextOptions());
   const page = await context.newPage();
   page.setDefaultTimeout(opts.timeout ?? 30_000);
+  await applyStealthScripts(page);
 
   let networkLogging = false;
   let consoleLogging = false;
